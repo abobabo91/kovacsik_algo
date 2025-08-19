@@ -8,9 +8,14 @@ from fastapi.responses import JSONResponse
 from openai import OpenAI
 from ib_insync import IB, Stock, MarketOrder
 
+from dotenv import load_dotenv
+
 # --------- Config via env ----------
+load_dotenv("./secrets.env", override=False)
+
+
 OPENAI_API_KEY   = os.getenv("OPENAI_API_KEY", "")
-MODEL            = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+MODEL            = os.getenv("OPENAI_MODEL", "gpt-5-nano")
 
 # IBKR
 IB_HOST          = os.getenv("IB_HOST", "127.0.0.1")
