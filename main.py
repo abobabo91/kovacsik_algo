@@ -82,7 +82,7 @@ def call_openai(sys: str, user: str) -> Dict[str, Any]:
         model=MODEL,
         response_format={"type": "json_object"},
         messages=[{"role":"system","content":sys},{"role":"user","content":user}],
-        temperature=0
+        temperature=1
     )
     try:
         out = json.loads(resp.choices[0].message.content)
