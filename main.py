@@ -77,23 +77,28 @@ def build_prompt(meta: Dict[str, str]) -> tuple[str, str]:
     )
     return sys, user
 
-def call_openai(sys: str, user: str) -> Dict[str, Any]:
-    resp = oa.chat.completions.create(
-        model=MODEL,
-        response_format={"type": "json_object"},
-        messages=[{"role":"system","content":sys},{"role":"user","content":user}],
-        temperature=1
-    )
+def call_openai(sys: str, user: str) -> dict:
     try:
-        out = json.loads(resp.choices[0].message.content)
-    except Exception:
-        out = {"buy": False, "symbol": "", "qty": 0, "reason": "ParseError"}
-    # Normalize
+        resp = oa.chat.completions.create(
+            model=MODEL,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": sys},
+                {"role": "user", "content": user},
+            ]
+            # NOTE: no temperature here; some models only accept default=1
+        )
+        try:
+            out = json.loads(resp.choices[0].message.content)
+        except Exception:
+            out = {"buy": False, "symbol": "", "qty": 0, "reason": "ParseError"}
+    except Exception as e:
+        return {"buy": False, "symbol": "", "qty": 0, "reason": f"OpenAIError: {type(e).__name__}: {e}"}
+
     out.setdefault("buy", False)
     out.setdefault("symbol", "")
     out.setdefault("qty", 0)
     out.setdefault("reason", "")
-    # Quantity fallback
     try:
         qty = int(out["qty"])
         out["qty"] = qty if qty > 0 else DEFAULT_QTY
@@ -101,6 +106,7 @@ def call_openai(sys: str, user: str) -> Dict[str, Any]:
         out["qty"] = DEFAULT_QTY
     out["symbol"] = (out["symbol"] or "").upper().strip()
     return out
+
 
 def allowed_symbol(symbol: str) -> bool:
     if not symbol:
