@@ -164,3 +164,18 @@ async def email_inbound(req: Request):
         result["reason"] = decision.get("reason", "Not a BUY or symbol not allowed")
 
     return JSONResponse(result)
+
+@app.get("/debug/openai")
+def debug_openai():
+    try:
+        resp = oa.chat.completions.create(
+            model=MODEL,
+            messages=[{"role":"user","content":"Test"}]
+        )
+        return {"ok": True, "model": MODEL, "sample": resp.choices[0].message.content[:40]}
+    except Exception as e:
+        return {"ok": False, "model": MODEL, "error": f"{type(e).__name__}: {e}"}
+
+
+
+
