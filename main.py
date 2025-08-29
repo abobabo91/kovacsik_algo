@@ -140,28 +140,36 @@ def health():
 
 @app.post("/email-inbound")
 async def email_inbound(req: Request):
-    # Handle JSON or form/multipart
+    # Parse JSON or form/multipart
     ctype = (req.headers.get("content-type") or "").lower()
-    if ctype.startswith("multipart/form-data") or ctype.startswith("application/x-www-form-urlencoded"):
+    if ctype.startswith(("multipart/form-data", "application/x-www-form-urlencoded")):
         form = await req.form()
-        data = {k: v if isinstance(v, str) else v.filename for k, v in form.items()}
+        data = {k: (v if isinstance(v, str) else getattr(v, "filename", "")) for k, v in form.items()}
     else:
         try:
             data = await req.json()
         except Exception:
             raw = await req.body()
-            # some providers POST as form-encoded without content-type; best-effort decode
             try:
                 data = json.loads(raw.decode("utf-8", errors="ignore"))
             except Exception:
                 data = {}
 
+    # Normalize once, then log the normalized view
+    print("RAW DATA:", data, flush=True)
     meta = normalize_inbound_payload(data)
+    print("INBOUND:", {
+        "ip": getattr(req.client, "host", None),
+        "ctype": ctype,
+        "from": meta.get("sender"),
+        "subject": meta.get("subject"),
+        "has_text": bool(meta.get("body")),
+    }, flush=True)
+
     sys, user = build_prompt(meta)
     decision = call_openai(sys, user)
 
     result = {"decision": decision, "executed": False}
-
     if decision.get("buy") and allowed_symbol(decision.get("symbol", "")):
         trade = place_buy(decision["symbol"], int(decision["qty"]))
         result["trade"] = trade
@@ -169,7 +177,11 @@ async def email_inbound(req: Request):
     else:
         result["reason"] = decision.get("reason", "Not a BUY or symbol not allowed")
 
+    # (Optional while debugging)
+    # result["meta"] = meta
+
     return JSONResponse(result)
+
 
 
 @app.get("/debug/openai")

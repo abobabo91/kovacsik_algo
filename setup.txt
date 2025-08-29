@@ -1,0 +1,15 @@
+powershell:
+ngrok http 8000
+ngrok csak tesztelni, railway a normalis
+
+
+bash:
+FASTAPI
+uvicorn main:app --reload
+
+
+RAILWAY
+deployed kell legyen
+
+
+MAKE-ben a workflow
