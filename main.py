@@ -117,62 +117,62 @@ def place_buy(symbol: str, qty: int) -> Dict[str, Any]:
     }
 
 
-
 def normalize_inbound_payload(data: Dict[str, Any]) -> Dict[str, str]:
-    """
-    Normalize inbound email payloads to {sender, subject, body}.
-    Works with Gmail (from Make), Mailgun, Postmark, etc.
-    Prefers plain text over HTML.
-    """
-    sender = data.get("from") or data.get("From") or data.get("sender") or ""
-    subject = data.get("subject") or data.get("Subject") or ""
-    body = (
-        data.get("text")
-        or data.get("TextBody")       # Postmark
-        or data.get("stripped-text")  # Mailgun
-        or data.get("html")
-        or ""
-    )
-    return {"sender": sender.strip(), "subject": subject.strip(), "body": body.strip()}
+    sender = data.get("from") or ""
+    subject = data.get("subject") or ""
+    body = data.get("text") or ""
+    return {
+        "sender": sender.strip(),
+        "subject": subject.strip(),
+        "body": body.strip(),
+    }
 
 
 @app.post("/email-inbound")
 async def email_inbound(req: Request):
-    # Try to parse JSON, fall back to form-data
-    data: Dict[str, Any] = {}
     try:
         ctype = (req.headers.get("content-type") or "").lower()
-        if ctype.startswith(("multipart/form-data", "application/x-www-form-urlencoded")):
+        raw = await req.body()
+
+        # Handle form-data or x-www-form-urlencoded
+        if "application/x-www-form-urlencoded" in ctype or "multipart/form-data" in ctype:
             form = await req.form()
             data = dict(form)
         else:
-            data = await req.json()
-    except Exception:
-        raw = await req.body()
-        try:
-            data = json.loads(raw.decode("utf-8", errors="ignore"))
-        except Exception:
-            data = {}
+            try:
+                data = await req.json()
+            except Exception:
+                try:
+                    data = json.loads(raw.decode("utf-8", errors="ignore"))
+                except Exception:
+                    data = {}
 
-    print("RAW DATA:", data, flush=True)
-    meta = normalize_inbound_payload(data)
-    print("INBOUND:", {
-        "from": meta["sender"],
-        "subject": meta["subject"],
-        "has_text": bool(meta["body"]),
-    }, flush=True)
+        print("RAW BODY:", raw.decode("utf-8", errors="ignore"), flush=True)
+        print("PARSED DATA:", data, flush=True)
 
-    sys, user = build_prompt(meta)
-    decision = call_openai(sys, user)
+        meta = normalize_inbound_payload(data)
+        print("INBOUND:", {
+            "from": meta["sender"],
+            "subject": meta["subject"],
+            "has_text": bool(meta["body"]),
+        }, flush=True)
 
-    result = {"decision": decision, "executed": False}
-    if decision.get("buy") and allowed_symbol(decision.get("symbol", "")):
-        result["trade"] = place_buy(decision["symbol"], int(decision["qty"]))
-        result["executed"] = True
-    else:
-        result["reason"] = decision.get("reason", "Not a BUY or symbol not allowed")
+        sys, user = build_prompt(meta)
+        decision = call_openai(sys, user)
 
-    return JSONResponse(result)
+        result = {"decision": decision, "executed": False}
+        if decision.get("buy") and allowed_symbol(decision.get("symbol", "")):
+            result["trade"] = place_buy(decision["symbol"], int(decision["qty"]))
+            result["executed"] = True
+        else:
+            result["reason"] = decision.get("reason", "Not a BUY or symbol not allowed")
+
+        return JSONResponse(result)
+
+    except Exception as e:
+        print("ERROR handling /email-inbound:", e, flush=True)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 
 
 
