@@ -117,53 +117,49 @@ def place_buy(symbol: str, qty: int) -> Dict[str, Any]:
     }
 
 
+
 def normalize_inbound_payload(data: Dict[str, Any]) -> Dict[str, str]:
     """
-    Accepts common inbound email payloads and returns {sender, subject, body}.
-    Supports Mailgun/Postmark/SendGrid-like JSON or multipart form fields.
+    Normalize inbound email payloads to {sender, subject, body}.
+    Works with Gmail (from Make), Mailgun, Postmark, etc.
+    Prefers plain text over HTML.
     """
-    # Common field names across providers
-    sender  = data.get("from") or data.get("From") or data.get("sender") or ""
+    sender = data.get("from") or data.get("From") or data.get("sender") or ""
     subject = data.get("subject") or data.get("Subject") or ""
-    body    = (
-        data.get("stripped-text")  # Mailgun
-        or data.get("TextBody")    # Postmark
-        or data.get("text")        # generic
-        or data.get("html")        # fallback
+    body = (
+        data.get("text")
+        or data.get("TextBody")       # Postmark
+        or data.get("stripped-text")  # Mailgun
+        or data.get("html")
         or ""
     )
-    return {"sender": str(sender), "subject": str(subject), "body": str(body)}
+    return {"sender": sender.strip(), "subject": subject.strip(), "body": body.strip()}
 
-
-# --------- Routes ----------
 
 @app.post("/email-inbound")
 async def email_inbound(req: Request):
-    # Parse JSON or form/multipart
-    ctype = (req.headers.get("content-type") or "").lower()
-    if ctype.startswith(("multipart/form-data", "application/x-www-form-urlencoded")):
-        form = await req.form()
-        data = {k: (v if isinstance(v, str) else getattr(v, "filename", "")) for k, v in form.items()}
-    else:
-        try:
+    # Try to parse JSON, fall back to form-data
+    data: Dict[str, Any] = {}
+    try:
+        ctype = (req.headers.get("content-type") or "").lower()
+        if ctype.startswith(("multipart/form-data", "application/x-www-form-urlencoded")):
+            form = await req.form()
+            data = dict(form)
+        else:
             data = await req.json()
+    except Exception:
+        raw = await req.body()
+        try:
+            data = json.loads(raw.decode("utf-8", errors="ignore"))
         except Exception:
-            raw = await req.body()
-            try:
-                data = json.loads(raw.decode("utf-8", errors="ignore"))
-            except Exception:
-                data = {}
+            data = {}
 
-    # Normalize once, then log the normalized view
-#    print("RAW BODY BYTES:", raw, flush=True)
     print("RAW DATA:", data, flush=True)
     meta = normalize_inbound_payload(data)
     print("INBOUND:", {
-        "ip": getattr(req.client, "host", None),
-        "ctype": ctype,
-        "from": meta.get("sender"),
-        "subject": meta.get("subject"),
-        "has_text": bool(meta.get("body")),
+        "from": meta["sender"],
+        "subject": meta["subject"],
+        "has_text": bool(meta["body"]),
     }, flush=True)
 
     sys, user = build_prompt(meta)
@@ -171,16 +167,13 @@ async def email_inbound(req: Request):
 
     result = {"decision": decision, "executed": False}
     if decision.get("buy") and allowed_symbol(decision.get("symbol", "")):
-        trade = place_buy(decision["symbol"], int(decision["qty"]))
-        result["trade"] = trade
+        result["trade"] = place_buy(decision["symbol"], int(decision["qty"]))
         result["executed"] = True
     else:
         result["reason"] = decision.get("reason", "Not a BUY or symbol not allowed")
 
-    # (Optional while debugging)
-    # result["meta"] = meta
-
     return JSONResponse(result)
+
 
 
 @app.get("/")
