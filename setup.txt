@@ -2,10 +2,10 @@ powershell:
 ngrok http 8000
 ngrok csak tesztelni, railway a normalis
 
-
 bash:
 FASTAPI
 uvicorn main:app --reload
+ez is csak tesztelni h lokalban megy a fastapi amugy a railwayen megy
 
 
 RAILWAY

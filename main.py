@@ -156,6 +156,7 @@ async def email_inbound(req: Request):
                 data = {}
 
     # Normalize once, then log the normalized view
+    print("RAW BODY BYTES:", raw, flush=True)
     print("RAW DATA:", data, flush=True)
     meta = normalize_inbound_payload(data)
     print("INBOUND:", {
