@@ -45,23 +45,6 @@ def ensure_ib() -> IB:
     return ib
 
 # --------- Helpers ----------
-def normalize_inbound_payload(data: Dict[str, Any]) -> Dict[str, str]:
-    """
-    Accepts common inbound email payloads and returns {sender, subject, body}.
-    Supports Mailgun/Postmark/SendGrid-like JSON or multipart form fields.
-    """
-    # Common field names across providers
-    sender  = data.get("from") or data.get("From") or data.get("sender") or ""
-    subject = data.get("subject") or data.get("Subject") or ""
-    body    = (
-        data.get("stripped-text")  # Mailgun
-        or data.get("TextBody")    # Postmark
-        or data.get("text")        # generic
-        or data.get("html")        # fallback
-        or ""
-    )
-    return {"sender": str(sender), "subject": str(subject), "body": str(body)}
-
 def build_prompt(meta: Dict[str, str]) -> tuple[str, str]:
     sys = (
         "You are a strict financial email classifier. "
@@ -133,10 +116,26 @@ def place_buy(symbol: str, qty: int) -> Dict[str, Any]:
         "qty": qty,
     }
 
+
+def normalize_inbound_payload(data: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Accepts common inbound email payloads and returns {sender, subject, body}.
+    Supports Mailgun/Postmark/SendGrid-like JSON or multipart form fields.
+    """
+    # Common field names across providers
+    sender  = data.get("from") or data.get("From") or data.get("sender") or ""
+    subject = data.get("subject") or data.get("Subject") or ""
+    body    = (
+        data.get("stripped-text")  # Mailgun
+        or data.get("TextBody")    # Postmark
+        or data.get("text")        # generic
+        or data.get("html")        # fallback
+        or ""
+    )
+    return {"sender": str(sender), "subject": str(subject), "body": str(body)}
+
+
 # --------- Routes ----------
-@app.get("/")
-def health():
-    return {"ok": True, "service": "email->gpt->ibkr", "dry_run": DRY_RUN}
 
 @app.post("/email-inbound")
 async def email_inbound(req: Request):
@@ -156,7 +155,7 @@ async def email_inbound(req: Request):
                 data = {}
 
     # Normalize once, then log the normalized view
-    print("RAW BODY BYTES:", raw, flush=True)
+#    print("RAW BODY BYTES:", raw, flush=True)
     print("RAW DATA:", data, flush=True)
     meta = normalize_inbound_payload(data)
     print("INBOUND:", {
@@ -183,6 +182,10 @@ async def email_inbound(req: Request):
 
     return JSONResponse(result)
 
+
+@app.get("/")
+def health():
+    return {"ok": True, "service": "email->gpt->ibkr", "dry_run": DRY_RUN}
 
 
 @app.get("/debug/openai")
